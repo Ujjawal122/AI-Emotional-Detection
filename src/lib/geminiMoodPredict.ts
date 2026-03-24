@@ -44,7 +44,11 @@ export async function predictMoodFromText(
     throw new Error("Input text is required");
   }
 
-  const model = opts?.model ?? process.env.GEMINI_MODEL ?? "gemini-1.5-flash";
+  const rawModel = opts?.model ?? process.env.GEMINI_MODEL ?? "gemini-1.5-flash";
+  // Gemini expects a model id like `gemini-1.5-flash` for:
+  //   /v1beta/models/{model}:generateContent
+  // If user includes `models/` we strip it to avoid `models/models/...` errors.
+  const model = rawModel.replace(/^models\//i, "").replace(/^model\//i, "").trim();
 
   const prompt = `
 You are a mood classifier for an emotional wellbeing app.
