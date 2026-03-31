@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, SetStateAction } from "react";
+import { useState, useEffect, useRef } from "react";
+import axios from "axios";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -135,17 +136,16 @@ export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
   const demoRef = useRef<HTMLDivElement>(null);
 
-  // ── Check auth via /api/me ──────────────────────────────
+  // ── Check auth via /api/auth/me ────────────────────────
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const res = await fetch("/api/me", { credentials: "include" });
-        if (res.ok) {
-          const data: User = await res.json();
-          setUser(data);
-        }
+        const { data } = await axios.get<User>("/api/auth/me", {
+          withCredentials: true,
+        });
+        setUser(data);
       } catch {
-        // not logged in — silent
+        // 401 = not logged in — silent
       } finally {
         setAuthLoading(false);
       }
@@ -163,7 +163,7 @@ export default function LandingPage() {
   // ── Logout ─────────────────────────────────────────────
   const handleLogout = async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      await axios.post("/api/auth/logout", {}, { withCredentials: true });
     } catch {
       // ignore
     }
@@ -361,7 +361,7 @@ export default function LandingPage() {
               ) : user ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button  style={{ display: "flex", alignItems: "center", gap: 8, color: "rgba(255,255,255,0.8)", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 999 }}>
+                    <Button style={{ display: "flex", alignItems: "center", gap: 8, color: "rgba(255,255,255,0.8)", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 999 }}>
                       <Avatar style={{ width: 26, height: 26 }}>
                         <AvatarFallback style={{ background: cm.accent, color: "#0a0a14", fontSize: 11, fontWeight: 700, transition: "background 1.2s ease" }}>
                           {userInitials}
@@ -400,7 +400,7 @@ export default function LandingPage() {
               ) : (
                 <>
                   <Button
-                    
+                   
                     className="ghost-btn"
                     style={{ borderRadius: 999, fontSize: 13 }}
                     onClick={() => router.push("/login")}
@@ -489,86 +489,127 @@ export default function LandingPage() {
             <span style={{ fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase" }}>scroll</span>
           </div>
         </section>
-
-        {/* ─── LIVE DEMO ─── */}
-        <section ref={demoRef} style={{ position: "relative", zIndex: 10, padding: "80px 24px 100px" }}>
-          <div style={{ maxWidth: 680, margin: "0 auto" }}>
-            <p style={{ textAlign: "center", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.18em", color: cm.accent, marginBottom: 10, transition: "color 1.2s ease" }}>
-              Live Demo
-            </p>
-            <h2 className="lora" style={{ fontSize: "clamp(1.8rem, 4vw, 2.8rem)", fontWeight: 700, textAlign: "center", marginBottom: 10 }}>
-              Tell me how you feel
-            </h2>
-            <p style={{ textAlign: "center", color: "rgba(255,255,255,0.4)", marginBottom: 36, lineHeight: 1.7 }}>
-              Type anything — a feeling, a thought, a sentence. Watch the world around you change.
-            </p>
-
-            <Card
-              className="dark-card"
-              style={{
-                background: "rgba(9,9,15,0.82)",
-                border: `1px solid ${cm.accent}28`,
-                borderRadius: 22,
-                overflow: "hidden",
-                transition: "border-color 1.2s ease",
-              }}
-            >
-              <CardContent style={{ padding: "28px 28px 20px" }}>
-                <Textarea
-                  className="demo-textarea"
-                  rows={4}
-                  placeholder="e.g. I feel so happy today, everything is going so well..."
-                  value={demoText}
-                  onChange={(e: { target: { value: SetStateAction<string>; }; }) => setDemoText(e.target.value)}
-                />
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 18 }}>
-                  <span style={{ fontSize: 13, color: cm.accent, minHeight: 20, transition: "color 1.2s ease" }}>
-                    {moodLabel}
-                  </span>
+        {/* ─── LIVE DEMO (guests) / WELCOME BACK (logged-in) ─── */}
+        {user ? (
+          /* ── Logged-in: quick-access dashboard card ── */
+          <section ref={demoRef} style={{ position: "relative", zIndex: 10, padding: "80px 24px 100px" }}>
+            <div style={{ maxWidth: 680, margin: "0 auto" }}>
+              <p style={{ textAlign: "center", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.18em", color: cm.accent, marginBottom: 10, transition: "color 1.2s ease" }}>
+                Welcome Back
+              </p>
+              <h2 className="lora" style={{ fontSize: "clamp(1.8rem, 4vw, 2.8rem)", fontWeight: 700, textAlign: "center", marginBottom: 10 }}>
+                Ready to continue,{" "}
+                <span style={{ color: cm.accent, transition: "color 1.2s ease", fontStyle: "italic" }}>
+                  {user.name ?? user.email?.split("@")[0] ?? "friend"}?
+                </span>
+              </h2>
+              <p style={{ textAlign: "center", color: "rgba(255,255,255,0.4)", marginBottom: 36, lineHeight: 1.7 }}>
+                Head to your dashboard to continue your emotional journey.
+              </p>
+              <Card
+                className="dark-card"
+                style={{ background: "rgba(9,9,15,0.82)", border: `1px solid ${cm.accent}28`, borderRadius: 22, overflow: "hidden", transition: "border-color 1.2s ease" }}
+              >
+                <CardContent style={{ padding: "32px 28px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+                    {([
+                      { icon: Brain, label: "Start a Chat", sub: "Talk to your AI", route: "/chat" },
+                      { icon: FolderOpen, label: "My Documents", sub: "Upload & manage files", route: "/documents" },
+                      { icon: TrendingUp, label: "Mood History", sub: "See your patterns", route: "/dashboard" },
+                      { icon: MessageCircle, label: "Profile", sub: "Manage your account", route: "/profile" },
+                    ] as const).map((item) => (
+                      <button
+                        key={item.label}
+                        onClick={() => router.push(item.route)}
+                        style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", background: `${cm.accent}0d`, border: `1px solid ${cm.accent}20`, borderRadius: 14, cursor: "pointer", transition: "background 0.2s, border-color 0.2s, transform 0.2s", textAlign: "left" }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = `${cm.accent}1a`; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)"; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = `${cm.accent}0d`; (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; }}
+                      >
+                        <div style={{ width: 36, height: 36, borderRadius: 10, background: `${cm.accent}18`, border: `1px solid ${cm.accent}30`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 1.2s ease" }}>
+                          <item.icon size={16} style={{ color: cm.accent, transition: "color 1.2s ease" }} />
+                        </div>
+                        <div>
+                          <p style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.85)", margin: 0 }}>{item.label}</p>
+                          <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", margin: 0, marginTop: 2 }}>{item.sub}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                   <Button
                     className="accent-btn"
-                    disabled={analyzing || !demoText.trim()}
-                    style={{ borderRadius: 999, fontSize: 13, background: cm.accent, color: "#0a0a14", minWidth: 138 }}
-                    onClick={analyzeMood}
+                    style={{ width: "100%", height: 46, borderRadius: 12, fontSize: 14, background: cm.accent, color: "#0a0a14" }}
+                    onClick={() => router.push("/dashboard")}
                   >
-                    {analyzing ? (
-                      <>
-                        <Loader2 size={14} style={{ marginRight: 6, animation: "spinSlow 0.8s linear infinite" }} />
-                        Reading...
-                      </>
-                    ) : (
-                      <>
-                        <Brain size={14} style={{ marginRight: 6 }} />
-                        Analyse Mood →
-                      </>
-                    )}
+                    <Sparkles size={15} style={{ marginRight: 7 }} />
+                    Open Dashboard
                   </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Mood track */}
-            <div className="mood-track" style={{ marginTop: 14, padding: "0 4px" }}>
-              {(["happy", "neutral", "sad"] as MoodKey[]).map((m) => (
-                <div key={m} style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
-                  <div
-                    className="mood-pip"
-                    style={{
-                      background: mood === m ? MOODS[m].accent : "rgba(255,255,255,0.1)",
-                      height: mood === m ? 4 : 2,
-                    }}
-                  />
-                  <span
-                    className="mood-pip-label"
-                    style={{ color: mood === m ? MOODS[m].accent : "rgba(255,255,255,0.22)" }}
-                  >
-                    {m}
-                  </span>
-                </div>
-              ))}
+                </CardContent>
+              </Card>
             </div>
-          </div>
-        </section>
+          </section>
+        ) : (
+          /* ── Guest: live mood demo ── */
+          <section ref={demoRef} style={{ position: "relative", zIndex: 10, padding: "80px 24px 100px" }}>
+            <div style={{ maxWidth: 680, margin: "0 auto" }}>
+              <p style={{ textAlign: "center", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.18em", color: cm.accent, marginBottom: 10, transition: "color 1.2s ease" }}>
+                Live Demo
+              </p>
+              <h2 className="lora" style={{ fontSize: "clamp(1.8rem, 4vw, 2.8rem)", fontWeight: 700, textAlign: "center", marginBottom: 10 }}>
+                Tell me how you feel
+              </h2>
+              <p style={{ textAlign: "center", color: "rgba(255,255,255,0.4)", marginBottom: 36, lineHeight: 1.7 }}>
+                Type anything — a feeling, a thought, a sentence. Watch the world around you change.
+              </p>
+              <Card
+                className="dark-card"
+                style={{ background: "rgba(9,9,15,0.82)", border: `1px solid ${cm.accent}28`, borderRadius: 22, overflow: "hidden", transition: "border-color 1.2s ease" }}
+              >
+                <CardContent style={{ padding: "28px 28px 20px" }}>
+                  <Textarea
+                    className="demo-textarea"
+                    rows={4}
+                    placeholder="e.g. I feel so happy today, everything is going so well..."
+                    value={demoText}
+                    onChange={(e) => setDemoText(e.target.value)}
+                  />
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 18 }}>
+                    <span style={{ fontSize: 13, color: cm.accent, minHeight: 20, transition: "color 1.2s ease" }}>
+                      {moodLabel}
+                    </span>
+                    <Button
+                      className="accent-btn"
+                      disabled={analyzing || !demoText.trim()}
+                      style={{ borderRadius: 999, fontSize: 13, background: cm.accent, color: "#0a0a14", minWidth: 138 }}
+                      onClick={analyzeMood}
+                    >
+                      {analyzing ? (
+                        <>
+                          <Loader2 size={14} style={{ marginRight: 6, animation: "spinSlow 0.8s linear infinite" }} />
+                          Reading...
+                        </>
+                      ) : (
+                        <>
+                          <Brain size={14} style={{ marginRight: 6 }} />
+                          Analyse Mood →
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+              <div className="mood-track" style={{ marginTop: 14, padding: "0 4px" }}>
+                {(["happy", "neutral", "sad"] as MoodKey[]).map((m) => (
+                  <div key={m} style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
+                    <div className="mood-pip" style={{ background: mood === m ? MOODS[m].accent : "rgba(255,255,255,0.1)", height: mood === m ? 4 : 2 }} />
+                    <span className="mood-pip-label" style={{ color: mood === m ? MOODS[m].accent : "rgba(255,255,255,0.22)" }}>
+                      {m}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* ─── HOW IT WORKS ─── */}
         <section style={{ position: "relative", zIndex: 10, padding: "60px 24px 90px" }}>

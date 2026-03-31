@@ -1,6 +1,8 @@
 "use client";
+
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,9 +28,14 @@ import {
   ChevronDown,
   ChevronRight,
   Trash2,
+  Sparkles,
+  Plus,
 } from "lucide-react";
 
+// ─── Types ───────────────────────────────────────────────
 interface User {
+  _id?: string;
+  username?: string; // your MongoDB signup field
   id: string;
   name?: string;
   email?: string;
@@ -57,63 +64,50 @@ interface FileItem {
   createdAt: string;
 }
 
-const MOOD_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  happy: { bg: "rgba(52,211,153,0.15)", border: "rgba(52,211,153,0.4)", text: "#34d399" },
-  excited: { bg: "rgba(251,191,36,0.15)", border: "rgba(251,191,36,0.4)", text: "#fbbf24" },
-  neutral: { bg: "rgba(167,139,250,0.15)", border: "rgba(167,139,250,0.4)", text: "#a78bfa" },
-  sad: { bg: "rgba(96,165,250,0.15)", border: "rgba(96,165,250,0.4)", text: "#60a5fa" },
-  low: { bg: "rgba(148,163,184,0.15)", border: "rgba(148,163,184,0.4)", text: "#94a3b8" },
-  stressed: { bg: "rgba(248,113,113,0.15)", border: "rgba(248,113,113,0.4)", text: "#f87171" },
-  anxious: { bg: "rgba(251,146,60,0.15)", border: "rgba(251,146,60,0.4)", text: "#fb923c" },
-  angry: { bg: "rgba(239,68,68,0.15)", border: "rgba(239,68,68,0.4)", text: "#ef4444" },
+// ─── Mood palette (matches landing page accent system) ───
+const MOOD_COLORS: Record<string, { bg: string; border: string; text: string; emoji: string }> = {
+  happy:   { bg: "rgba(52,211,153,0.10)",  border: "rgba(52,211,153,0.28)",  text: "#34d399", emoji: "😊" },
+  excited: { bg: "rgba(251,191,36,0.10)",  border: "rgba(251,191,36,0.28)",  text: "#fbbf24", emoji: "🤩" },
+  neutral: { bg: "rgba(167,139,250,0.10)", border: "rgba(167,139,250,0.28)", text: "#a78bfa", emoji: "😐" },
+  sad:     { bg: "rgba(96,165,250,0.10)",  border: "rgba(96,165,250,0.28)",  text: "#60a5fa", emoji: "😢" },
+  low:     { bg: "rgba(148,163,184,0.10)", border: "rgba(148,163,184,0.28)", text: "#94a3b8", emoji: "😔" },
+  stressed:{ bg: "rgba(248,113,113,0.10)", border: "rgba(248,113,113,0.28)", text: "#f87171", emoji: "😤" },
+  anxious: { bg: "rgba(251,146,60,0.10)",  border: "rgba(251,146,60,0.28)",  text: "#fb923c", emoji: "😰" },
+  angry:   { bg: "rgba(239,68,68,0.10)",   border: "rgba(239,68,68,0.28)",   text: "#ef4444", emoji: "😠" },
 };
 
 const formatSize = (b: number) => {
   if (b === 0) return "0 B";
-  const k = 1024,
-    s = ["B", "KB", "MB", "GB"],
-    i = Math.floor(Math.log(b) / Math.log(k));
+  const k = 1024, s = ["B", "KB", "MB", "GB"], i = Math.floor(Math.log(b) / Math.log(k));
   return parseFloat((b / Math.pow(k, i)).toFixed(1)) + " " + s[i];
 };
-
 const formatDate = (d: string) =>
-  new Date(d).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 type TabType = "mood" | "notes" | "files" | "chat";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser]           = useState<User | null>(null);
+  const [loading, setLoading]     = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("mood");
 
-  // Data states
   const [moodEntries, setMoodEntries] = useState<MoodEntry[]>([]);
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [files, setFiles] = useState<FileItem[]>([]);
+  const [notes, setNotes]             = useState<Note[]>([]);
+  const [files, setFiles]             = useState<FileItem[]>([]);
 
-  // UI states
-  const [moodLoading, setMoodLoading] = useState(false);
+  const [moodLoading, setMoodLoading]   = useState(false);
   const [notesLoading, setNotesLoading] = useState(false);
   const [filesLoading, setFilesLoading] = useState(false);
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId]     = useState<string | null>(null);
 
-  // Fetch user on mount
+  // ── Auth via /api/auth/me ─────────────────────────────
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const res = await fetch("/api/auth/me");
-        if (!res.ok) {
-          router.push("/login");
-          return;
-        }
-        const data = await res.json();
-        setUser(data.user);
+        const { data } = await axios.get<User>("/api/auth/me", { withCredentials: true });
+        setUser(data);
       } catch {
         router.push("/login");
       } finally {
@@ -123,109 +117,77 @@ export default function DashboardPage() {
     fetchUser();
   }, [router]);
 
-  // Fetch data when tab changes
+  // ── Fetch data on tab change ──────────────────────────
   useEffect(() => {
     if (!user) return;
-    if (activeTab === "mood") fetchMoodEntries();
-    else if (activeTab === "notes") fetchNotes();
-    else if (activeTab === "files") fetchFiles();
+    if (activeTab === "mood")  fetchMoodEntries();
+    if (activeTab === "notes") fetchNotes();
+    if (activeTab === "files") fetchFiles();
   }, [activeTab, user]);
 
   const fetchMoodEntries = async () => {
     setMoodLoading(true);
     try {
-      const res = await fetch("/api/mood");
-      if (res.ok) {
-        const data = await res.json();
-        setMoodEntries(data.entries ?? []);
-      }
-    } finally {
-      setMoodLoading(false);
-    }
+      const { data } = await axios.get("/api/mood", { withCredentials: true });
+      setMoodEntries(data.entries ?? []);
+    } catch { /* silent */ } finally { setMoodLoading(false); }
   };
 
   const fetchNotes = async () => {
     setNotesLoading(true);
     try {
-      const res = await fetch("/api/notes");
-      if (res.ok) {
-        const data = await res.json();
-        setNotes(data.notes ?? []);
-      }
-    } finally {
-      setNotesLoading(false);
-    }
+      const { data } = await axios.get("/api/notes", { withCredentials: true });
+      setNotes(data.notes ?? []);
+    } catch { /* silent */ } finally { setNotesLoading(false); }
   };
 
   const fetchFiles = async () => {
     setFilesLoading(true);
     try {
-      const res = await fetch("/api/files");
-      if (res.ok) {
-        const data = await res.json();
-        setFiles(data.files ?? []);
-      }
-    } finally {
-      setFilesLoading(false);
-    }
+      const { data } = await axios.get("/api/files", { withCredentials: true });
+      setFiles(data.files ?? []);
+    } catch { /* silent */ } finally { setFilesLoading(false); }
   };
 
   const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
+    try { await axios.post("/api/auth/logout", {}, { withCredentials: true }); } catch { /* silent */ }
     router.push("/login");
   };
 
   const handleDeleteMood = async (id: string) => {
     setDeletingId(id);
     try {
-      const res = await fetch(`/api/mood/${id}`, { method: "DELETE" });
-      if (res.ok) setMoodEntries((prev) => prev.filter((e) => e._id !== id));
-    } finally {
-      setDeletingId(null);
-    }
+      await axios.delete(`/api/mood/${id}`, { withCredentials: true });
+      setMoodEntries((p) => p.filter((e) => e._id !== id));
+    } catch { /* silent */ } finally { setDeletingId(null); }
   };
 
   const handleDeleteNote = async (id: string) => {
     setDeletingId(id);
     try {
-      const res = await fetch(`/api/notes/${id}`, { method: "DELETE" });
-      if (res.ok) setNotes((prev) => prev.filter((n) => n._id !== id));
-    } finally {
-      setDeletingId(null);
-    }
+      await axios.delete(`/api/notes/${id}`, { withCredentials: true });
+      setNotes((p) => p.filter((n) => n._id !== id));
+    } catch { /* silent */ } finally { setDeletingId(null); }
   };
 
   const handleDeleteFile = async (id: string) => {
     setDeletingId(id);
     try {
-      const res = await fetch(`/api/files/${id}`, { method: "DELETE" });
-      if (res.ok) setFiles((prev) => prev.filter((f) => f._id !== id));
-    } finally {
-      setDeletingId(null);
-    }
+      await axios.delete(`/api/files/${id}`, { withCredentials: true });
+      setFiles((p) => p.filter((f) => f._id !== id));
+    } catch { /* silent */ } finally { setDeletingId(null); }
   };
 
   const handleTogglePin = async (id: string, isPinned: boolean) => {
     try {
-      const res = await fetch(`/api/notes/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isPinned: !isPinned }),
-      });
-      if (res.ok) {
-        setNotes((prev) =>
-          prev.map((n) => (n._id === id ? { ...n, isPinned: !isPinned } : n))
-        );
-      }
-    } catch {
-      /* silent */
-    }
+      await axios.patch(`/api/notes/${id}`, { isPinned: !isPinned }, { withCredentials: true });
+      setNotes((p) => p.map((n) => n._id === id ? { ...n, isPinned: !isPinned } : n));
+    } catch { /* silent */ }
   };
 
   const toggleFolder = (folder: string) =>
-    setExpandedFolders((prev) => ({ ...prev, [folder]: !prev[folder] }));
+    setExpandedFolders((p) => ({ ...p, [folder]: !p[folder] }));
 
-  // Group files by folder
   const filesByFolder = files.reduce<Record<string, FileItem[]>>((acc, f) => {
     const key = f.folder || "Uncategorized";
     if (!acc[key]) acc[key] = [];
@@ -233,419 +195,733 @@ export default function DashboardPage() {
     return acc;
   }, {});
 
-  const initials = user?.name
-    ? user.name
-        .split(" ")
-        .map((w) => w[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2)
+  const sortedNotes = [...notes].sort((a, b) => (a.isPinned === b.isPinned ? 0 : a.isPinned ? -1 : 1));
+
+  // username is the field from your signup route — fallback to name then email
+  const displayName = user?.username ?? user?.name;
+  const initials = displayName
+    ? displayName.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2)
     : user?.email?.[0]?.toUpperCase() ?? "U";
 
   const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
-    { id: "mood", label: "Mood", icon: <TrendingUp className="w-4 h-4" /> },
-    { id: "notes", label: "Notes", icon: <FileText className="w-4 h-4" /> },
-    { id: "files", label: "Files", icon: <FolderOpen className="w-4 h-4" /> },
-    { id: "chat", label: "Chat", icon: <MessageCircle className="w-4 h-4" /> },
+    { id: "mood",  label: "Mood",  icon: <TrendingUp  size={15} /> },
+    { id: "notes", label: "Notes", icon: <FileText    size={15} /> },
+    { id: "files", label: "Files", icon: <FolderOpen  size={15} /> },
+    { id: "chat",  label: "Chat",  icon: <MessageCircle size={15} /> },
   ];
 
-  // ── Sorted notes: pinned first ──────────────────────────────────────────────
-  const sortedNotes = [...notes].sort((a, b) => {
-    if (a.isPinned === b.isPinned) return 0;
-    return a.isPinned ? -1 : 1;
-  });
-
+  // ── Full-page loader ──────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-      </div>
+      <>
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap');
+          body { margin: 0; background: #09090f; }
+        `}</style>
+        <div style={{ minHeight: "100vh", background: "#09090f", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+            <div style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(167,139,250,0.12)", border: "1.5px solid rgba(167,139,250,0.4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, animation: "spin 14s linear infinite" }}>🌀</div>
+            <Loader2 size={20} style={{ color: "#a78bfa", animation: "spin 1s linear infinite" }} />
+          </div>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-md">
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Brain className="w-6 h-6 text-primary" />
-            <span className="font-semibold tracking-tight text-lg">MindSpace</span>
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+        *, *::before, *::after { box-sizing: border-box; }
+        body { margin: 0; background: #09090f; }
+
+        .db-root {
+          font-family: 'DM Sans', sans-serif;
+          min-height: 100vh;
+          background: linear-gradient(135deg, #09090f 0%, #0d0d1c 50%, #09090f 100%);
+          color: white;
+          position: relative;
+          overflow-x: hidden;
+        }
+
+        .lora { font-family: 'Lora', serif; }
+
+        /* Orbs */
+        .db-orb {
+          position: fixed; border-radius: 50%; filter: blur(90px);
+          opacity: 0.13; pointer-events: none; z-index: 0;
+        }
+
+        /* Grid dots */
+        .db-grid {
+          position: fixed; inset: 0; z-index: 0;
+          background-image: radial-gradient(circle, rgba(167,139,250,0.055) 1px, transparent 1px);
+          background-size: 36px 36px; pointer-events: none;
+        }
+
+        /* Navbar */
+        .db-nav {
+          position: sticky; top: 0; z-index: 50;
+          background: rgba(9,9,15,0.72);
+          backdrop-filter: blur(18px);
+          border-bottom: 1px solid rgba(255,255,255,0.07);
+        }
+        .db-nav-inner {
+          max-width: 1100px; margin: 0 auto;
+          padding: 0 24px; height: 58px;
+          display: flex; align-items: center; justify-content: space-between;
+        }
+
+        /* Logo */
+        .db-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+        .db-logo-ring {
+          width: 32px; height: 32px; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+          background: rgba(167,139,250,0.12);
+          border: 1.5px solid rgba(167,139,250,0.4);
+          font-size: 14px;
+          animation: dbSpin 14s linear infinite;
+        }
+        @keyframes dbSpin { to { transform: rotate(360deg); } }
+        .db-logo-text { font-family: 'Lora', serif; font-size: 19px; font-weight: 700; color: #a78bfa; }
+
+        /* User dropdown btn */
+        .db-user-btn {
+          display: flex; align-items: center; gap: 8px;
+          padding: 6px 12px 6px 6px;
+          background: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 999px;
+          cursor: pointer;
+          transition: background 0.2s;
+          color: rgba(255,255,255,0.8);
+          font-family: 'DM Sans', sans-serif;
+          font-size: 13px;
+        }
+        .db-user-btn:hover { background: rgba(255,255,255,0.09); }
+
+        /* Main content */
+        .db-main { position: relative; z-index: 10; max-width: 1100px; margin: 0 auto; padding: 32px 24px 60px; }
+
+        /* Welcome strip */
+        .db-welcome {
+          margin-bottom: 32px;
+          animation: dbFadeUp 0.6s ease both;
+        }
+        @keyframes dbFadeUp {
+          from { opacity: 0; transform: translateY(16px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Tab bar */
+        .db-tabs {
+          display: flex; gap: 4px;
+          background: rgba(255,255,255,0.04);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 14px;
+          padding: 5px;
+          width: fit-content;
+          margin-bottom: 28px;
+        }
+        .db-tab {
+          display: flex; align-items: center; gap: 7px;
+          padding: 8px 18px;
+          border-radius: 10px;
+          font-size: 13px; font-weight: 500;
+          cursor: pointer; border: none;
+          font-family: 'DM Sans', sans-serif;
+          transition: all 0.2s;
+          color: rgba(255,255,255,0.4);
+          background: transparent;
+        }
+        .db-tab:hover { color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.04); }
+        .db-tab.active {
+          background: rgba(167,139,250,0.15);
+          border: 1px solid rgba(167,139,250,0.25);
+          color: #a78bfa;
+        }
+
+        /* Section header */
+        .db-section-header {
+          display: flex; align-items: center; justify-content: space-between;
+          margin-bottom: 20px;
+        }
+        .db-section-title { font-family: 'Lora', serif; font-size: 1.5rem; font-weight: 700; }
+
+        /* Add button */
+        .db-add-btn {
+          display: flex; align-items: center; gap: 7px;
+          padding: 9px 18px;
+          background: #a78bfa;
+          color: #0a0a14;
+          border: none; border-radius: 12px;
+          font-size: 13px; font-weight: 600;
+          font-family: 'DM Sans', sans-serif;
+          cursor: pointer;
+          transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .db-add-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(167,139,250,0.35); }
+
+        /* Mood entry card */
+        .db-mood-card {
+          display: flex; align-items: flex-start; gap: 16px;
+          padding: 16px 18px;
+          border-radius: 16px;
+          border: 1px solid;
+          margin-bottom: 10px;
+          transition: transform 0.2s, box-shadow 0.2s;
+          position: relative;
+        }
+        .db-mood-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+        .db-mood-emoji {
+          width: 42px; height: 42px; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 20px; flex-shrink: 0;
+        }
+        .db-mood-delete {
+          position: absolute; top: 12px; right: 12px;
+          opacity: 0; transition: opacity 0.2s;
+          background: rgba(248,113,113,0.1);
+          border: 1px solid rgba(248,113,113,0.2);
+          border-radius: 8px; padding: 5px;
+          cursor: pointer; color: #f87171;
+          display: flex; align-items: center;
+        }
+        .db-mood-card:hover .db-mood-delete { opacity: 1; }
+
+        /* Note card override */
+        .db-note-card {
+          background: rgba(255,255,255,0.04) !important;
+          border: 1px solid rgba(255,255,255,0.09) !important;
+          border-radius: 16px !important;
+          cursor: pointer;
+          transition: background 0.2s, border-color 0.2s, transform 0.2s !important;
+          position: relative;
+          overflow: hidden;
+        }
+        .db-note-card::before {
+          content: ''; position: absolute; top: 0; left: 0; right: 0;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(167,139,250,0.3), transparent);
+        }
+        .db-note-card:hover {
+          background: rgba(255,255,255,0.07) !important;
+          border-color: rgba(167,139,250,0.25) !important;
+          transform: translateY(-3px);
+        }
+
+        /* Note hover actions */
+        .db-note-actions {
+          position: absolute; top: 10px; right: 10px;
+          display: flex; gap: 4px;
+          opacity: 0; transition: opacity 0.2s;
+        }
+        .db-note-card:hover .db-note-actions { opacity: 1; }
+        .db-icon-btn {
+          padding: 5px; border-radius: 8px;
+          border: 1px solid rgba(255,255,255,0.1);
+          background: rgba(255,255,255,0.06);
+          color: rgba(255,255,255,0.5);
+          cursor: pointer; display: flex; align-items: center;
+          transition: background 0.2s, color 0.2s;
+        }
+        .db-icon-btn:hover { background: rgba(248,113,113,0.15); color: #f87171; border-color: rgba(248,113,113,0.3); }
+        .db-icon-btn.pin:hover { background: rgba(167,139,250,0.15); color: #a78bfa; border-color: rgba(167,139,250,0.3); }
+
+        /* File folder */
+        .db-folder {
+          border: 1px solid rgba(255,255,255,0.09);
+          border-radius: 16px; overflow: hidden;
+          margin-bottom: 10px;
+        }
+        .db-folder-header {
+          display: flex; align-items: center; gap: 10px;
+          padding: 12px 16px;
+          background: rgba(255,255,255,0.04);
+          cursor: pointer; border: none; width: 100%; text-align: left;
+          color: white; font-family: 'DM Sans', sans-serif;
+          font-size: 13px; font-weight: 500;
+          transition: background 0.2s;
+        }
+        .db-folder-header:hover { background: rgba(255,255,255,0.07); }
+        .db-file-row {
+          display: flex; align-items: center; gap: 12px;
+          padding: 11px 16px;
+          border-top: 1px solid rgba(255,255,255,0.06);
+          transition: background 0.2s;
+          position: relative;
+        }
+        .db-file-row:hover { background: rgba(255,255,255,0.03); }
+        .db-file-delete {
+          opacity: 0; transition: opacity 0.2s;
+          background: rgba(248,113,113,0.1);
+          border: 1px solid rgba(248,113,113,0.2);
+          border-radius: 8px; padding: 5px;
+          cursor: pointer; color: #f87171;
+          display: flex; align-items: center;
+          margin-left: auto;
+        }
+        .db-file-row:hover .db-file-delete { opacity: 1; }
+
+        /* Empty state */
+        .db-empty {
+          display: flex; flex-direction: column;
+          align-items: center; justify-content: center;
+          gap: 14px; padding: 80px 24px;
+          text-align: center;
+        }
+        .db-empty-icon {
+          width: 60px; height: 60px; border-radius: 50%;
+          background: rgba(167,139,250,0.08);
+          border: 1px solid rgba(167,139,250,0.18);
+          display: flex; align-items: center; justify-content: center;
+          color: #a78bfa;
+        }
+
+        /* Chat placeholder */
+        .db-chat-box {
+          border: 1px solid rgba(255,255,255,0.09);
+          border-radius: 20px;
+          background: rgba(167,139,250,0.04);
+          display: flex; flex-direction: column;
+          align-items: center; justify-content: center;
+          gap: 16px; padding: 80px 24px;
+          text-align: center;
+        }
+        .db-chat-icon {
+          width: 64px; height: 64px; border-radius: 50%;
+          background: rgba(167,139,250,0.12);
+          border: 1.5px solid rgba(167,139,250,0.3);
+          display: flex; align-items: center; justify-content: center;
+        }
+        .db-chat-btn {
+          display: flex; align-items: center; gap: 8px;
+          padding: 12px 28px;
+          background: #a78bfa; color: #0a0a14;
+          border: none; border-radius: 12px;
+          font-size: 14px; font-weight: 600;
+          font-family: 'DM Sans', sans-serif;
+          cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .db-chat-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(167,139,250,0.35); }
+
+        /* Spinner */
+        @keyframes dbSpinFast { to { transform: rotate(360deg); } }
+        .db-spinner { animation: dbSpinFast 0.9s linear infinite; }
+
+        /* Dropdown overrides */
+        .db-dropdown {
+          background: #111120 !important;
+          border: 1px solid rgba(255,255,255,0.1) !important;
+          color: white !important;
+          min-width: 180px;
+        }
+
+        /* Badge text */
+        .mood-badge {
+          font-size: 11px; font-weight: 500;
+          padding: 2px 10px; border-radius: 999px;
+          text-transform: capitalize;
+          border: 1px solid;
+        }
+
+        /* Stats row */
+        .db-stats {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 12px; margin-bottom: 32px;
+        }
+        .db-stat-card {
+          background: rgba(255,255,255,0.04);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 16px; padding: 18px 20px;
+          transition: background 0.2s, transform 0.2s;
+        }
+        .db-stat-card:hover { background: rgba(255,255,255,0.07); transform: translateY(-2px); }
+        .db-stat-num { font-family: 'Lora', serif; font-size: 2rem; font-weight: 700; color: #a78bfa; line-height: 1; margin-bottom: 4px; }
+        .db-stat-label { font-size: 12px; color: rgba(255,255,255,0.4); }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
+
+      <div className="db-root">
+        <div className="db-grid" />
+        <div className="db-orb" style={{ width: 500, height: 500, top: -160, left: -120, background: "#1a1a3e" }} />
+        <div className="db-orb" style={{ width: 400, height: 400, bottom: "5%", right: -100, background: "#111130" }} />
+
+        {/* ── NAVBAR ── */}
+        <nav className="db-nav">
+          <div className="db-nav-inner">
+            {/* Logo */}
+            <a href="/" className="db-logo">
+              <div className="db-logo-ring">🌀</div>
+              <span className="db-logo-text">EmoSoul</span>
+            </a>
+
+            {/* User dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="db-user-btn">
+                  <Avatar style={{ width: 28, height: 28 }}>
+                    <AvatarFallback style={{ background: "rgba(167,139,250,0.2)", color: "#a78bfa", fontSize: 11, fontWeight: 700 }}>
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {displayName ?? user?.email ?? "Account"}
+                  </span>
+                  <ChevronDown size={13} style={{ opacity: 0.5 }} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="db-dropdown">
+                <DropdownMenuLabel style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 400 }}>
+                  {user?.email}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator style={{ background: "rgba(255,255,255,0.08)" }} />
+                <DropdownMenuItem
+                  onClick={() => router.push("/profile")}
+                  style={{ cursor: "pointer", color: "", fontSize: 13 }}
+                >
+                  Profile
+                </DropdownMenuItem>
+                <DropdownMenuSeparator style={{ background: "rgba(255,255,255,0.08)" }} />
+                <DropdownMenuItem
+                  onClick={handleLogout}
+                  style={{ cursor: "pointer", color: "#f87171", fontSize: 13, display: "flex", alignItems: "center", gap: 7 }}
+                >
+                  <LogOut size={13} /> Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </nav>
+
+        {/* ── MAIN ── */}
+        <main className="db-main">
+
+          {/* Welcome */}
+          <div className="db-welcome">
+            <p style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.18em", color: "#a78bfa", marginBottom: 6 }}>
+              Dashboard
+            </p>
+            <h1 className="lora" style={{ fontSize: "clamp(1.6rem, 4vw, 2.4rem)", fontWeight: 700, marginBottom: 6 }}>
+              Hello,{" "}
+              <span style={{ color: "#a78bfa", fontStyle: "italic" }}>
+                {displayName ?? user?.email?.split("@")[0] ?? "friend"}
+              </span>{" "}
+              👋
+            </h1>
+            <p style={{ color: "rgba(255,255,255,0.38)", fontSize: 14 }}>
+              Here's a look at your emotional journey.
+            </p>
           </div>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button  className="gap-2 px-2">
-                <Avatar className="w-7 h-7">
-                  <AvatarFallback className="text-xs bg-primary/20 text-primary">
-                    {initials}
-                  </AvatarFallback>
-                </Avatar>
-                <span className="text-sm text-muted-foreground hidden sm:block">
-                  {user?.name ?? user?.email}
-                </span>
-                <ChevronDown className="w-3 h-3 text-muted-foreground" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
-                {user?.email}
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={handleLogout}
-                className="text-destructive focus:text-destructive gap-2 cursor-pointer"
-              >
-                <LogOut className="w-4 h-4" />
-                Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </header>
-
-      {/* ── Main ────────────────────────────────────────────────────────────── */}
-      <main className="max-w-5xl mx-auto px-4 py-8">
-        {/* Tab bar */}
-        <div className="flex gap-1 mb-8 bg-muted/50 p-1 rounded-lg w-fit">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                activeTab === tab.id
-                  ? "bg-background shadow-sm text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {tab.icon}
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* ── MOOD TAB ──────────────────────────────────────────────────────── */}
-        {activeTab === "mood" && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xl font-semibold">Mood Journal</h2>
-              <Button  onClick={() => router.push("/mood/new")}>
-                <Calendar className="w-4 h-4 mr-1.5" />
-                Log Mood
-              </Button>
-            </div>
-
-            {moodLoading ? (
-              <div className="flex justify-center py-16">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          {/* Stats */}
+          <div className="db-stats">
+            {[
+              { num: moodEntries.length, label: "Mood Entries" },
+              { num: notes.length,       label: "Notes" },
+              { num: files.length,       label: "Files" },
+              { num: notes.filter((n) => n.isPinned).length, label: "Pinned Notes" },
+            ].map((s) => (
+              <div key={s.label} className="db-stat-card">
+                <div className="db-stat-num">{s.num}</div>
+                <div className="db-stat-label">{s.label}</div>
               </div>
-            ) : moodEntries.length === 0 ? (
-              <EmptyState
-                icon={<TrendingUp className="w-8 h-8" />}
-                title="No mood entries yet"
-                description="Start tracking how you feel each day."
-                action={
-                  <Button  onClick={() => router.push("/mood/new")}>
-                    Log your first mood
-                  </Button>
-                }
-              />
-            ) : (
-              <div className="grid gap-3">
-                {moodEntries.map((entry) => {
-                  const colors =
-                    MOOD_COLORS[entry.sentiment] ?? MOOD_COLORS.neutral;
-                  return (
-                    <div
-                      key={entry._id}
-                      className="rounded-xl border p-4 flex items-start gap-4 group transition-all hover:shadow-sm"
-                      style={{
-                        backgroundColor: colors.bg,
-                        borderColor: colors.border,
-                      }}
-                    >
+            ))}
+          </div>
+
+          {/* Tab bar */}
+          <div className="db-tabs">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                className={`db-tab ${activeTab === tab.id ? "active" : ""}`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* ── MOOD TAB ── */}
+          {activeTab === "mood" && (
+            <div>
+              <div className="db-section-header">
+                <span className="db-section-title">Mood Journal</span>
+                <button className="db-add-btn" onClick={() => router.push("/mood/new")}>
+                  <Plus size={14} /> Log Mood
+                </button>
+              </div>
+
+              {moodLoading ? (
+                <LoadingSpinner />
+              ) : moodEntries.length === 0 ? (
+                <EmptyState
+                  icon={<TrendingUp size={24} />}
+                  title="No mood entries yet"
+                  desc="Start tracking how you feel each day."
+                  btnLabel="Log your first mood"
+                  onAction={() => router.push("/mood/new")}
+                />
+              ) : (
+                <div>
+                  {moodEntries.map((entry) => {
+                    const c = MOOD_COLORS[entry.sentiment] ?? MOOD_COLORS.neutral;
+                    return (
                       <div
-                        className="mt-0.5 w-10 h-10 rounded-full flex items-center justify-center text-lg flex-shrink-0"
-                        style={{ backgroundColor: colors.border }}
+                        key={entry._id}
+                        className="db-mood-card"
+                        style={{ backgroundColor: c.bg, borderColor: c.border }}
                       >
-                        {getMoodEmoji(entry.sentiment)}
+                        <div className="db-mood-emoji" style={{ background: `${c.border}` }}>
+                          {c.emoji}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                            <span className="mood-badge" style={{ color: c.text, borderColor: c.border, background: c.bg }}>
+                              {entry.sentiment}
+                            </span>
+                            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>
+                              Intensity: {entry.intensity}/10
+                            </span>
+                            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", marginLeft: "auto" }}>
+                              {formatDate(entry.createdAt)}
+                            </span>
+                          </div>
+                          {entry.text && (
+                            <p style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", lineHeight: 1.6, margin: 0, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                              {entry.text}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          className="db-mood-delete"
+                          onClick={() => handleDeleteMood(entry._id)}
+                          disabled={deletingId === entry._id}
+                        >
+                          {deletingId === entry._id
+                            ? <Loader2 size={13} className="db-spinner" />
+                            : <Trash2 size={13} />}
+                        </button>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge
-                            variant="outline"
-                            className="text-xs capitalize border-0 px-2 py-0.5"
-                            style={{ color: colors.text, backgroundColor: colors.bg }}
-                          >
-                            {entry.sentiment}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            Intensity: {entry.intensity}/10
-                          </span>
-                          <span className="text-xs text-muted-foreground ml-auto">
-                            {formatDate(entry.createdAt)}
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── NOTES TAB ── */}
+          {activeTab === "notes" && (
+            <div>
+              <div className="db-section-header">
+                <span className="db-section-title">Notes</span>
+                <button className="db-add-btn" onClick={() => router.push("/notes/new")}>
+                  <Plus size={14} /> New Note
+                </button>
+              </div>
+
+              {notesLoading ? (
+                <LoadingSpinner />
+              ) : sortedNotes.length === 0 ? (
+                <EmptyState
+                  icon={<FileText size={24} />}
+                  title="No notes yet"
+                  desc="Capture your thoughts and ideas."
+                  btnLabel="Create your first note"
+                  onAction={() => router.push("/notes/new")}
+                />
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
+                  {sortedNotes.map((note) => (
+                    <Card
+                      key={note._id}
+                      className="db-note-card"
+                      onClick={() => router.push(`/notes/${note._id}`)}
+                    >
+                      {/* Pin indicator */}
+                      {note.isPinned && (
+                        <div style={{ position: "absolute", top: 12, left: 12, width: 6, height: 6, borderRadius: "50%", background: "#a78bfa" }} />
+                      )}
+
+                      {/* Hover actions */}
+                      <div className="db-note-actions" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          className="db-icon-btn pin"
+                          onClick={() => handleTogglePin(note._id, note.isPinned)}
+                          title={note.isPinned ? "Unpin" : "Pin"}
+                        >
+                          <Pin size={12} />
+                        </button>
+                        <button
+                          className="db-icon-btn"
+                          onClick={() => handleDeleteNote(note._id)}
+                          disabled={deletingId === note._id}
+                        >
+                          {deletingId === note._id
+                            ? <Loader2 size={12} className="db-spinner" />
+                            : <Trash2 size={12} />}
+                        </button>
+                      </div>
+
+                      <CardHeader style={{ padding: "20px 18px 8px" }}>
+                        <CardTitle style={{ fontSize: 15, fontWeight: 600, color: "white", lineHeight: 1.4, paddingRight: 40, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>
+                          {note.title || "Untitled"}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent style={{ padding: "0 18px 18px" }}>
+                        <p style={{ fontSize: 13, color: "rgba(255,255,255,0.38)", lineHeight: 1.65, marginBottom: 12, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                          {note.content}
+                        </p>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          {note.tags?.slice(0, 3).map((tag) => (
+                            <span key={tag} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.2)", color: "#a78bfa" }}>
+                              {tag}
+                            </span>
+                          ))}
+                          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", marginLeft: "auto" }}>
+                            {formatDate(note.createdAt)}
                           </span>
                         </div>
-                        {entry.text && (
-                          <p className="text-sm text-foreground/80 line-clamp-2">
-                            {entry.text}
-                          </p>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => handleDeleteMood(entry._id)}
-                        disabled={deletingId === entry._id}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex-shrink-0"
-                      >
-                        {deletingId === entry._id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── NOTES TAB ─────────────────────────────────────────────────────── */}
-        {activeTab === "notes" && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xl font-semibold">Notes</h2>
-              <Button  onClick={() => router.push("/notes/new")}>
-                <FileText className="w-4 h-4 mr-1.5" />
-                New Note
-              </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
+          )}
 
-            {notesLoading ? (
-              <div className="flex justify-center py-16">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          {/* ── FILES TAB ── */}
+          {activeTab === "files" && (
+            <div>
+              <div className="db-section-header">
+                <span className="db-section-title">Files</span>
+                <button className="db-add-btn" onClick={() => router.push("/file/upload")}>
+                  <Plus size={14} /> Upload
+                </button>
               </div>
-            ) : sortedNotes.length === 0 ? (
-              <EmptyState
-                icon={<FileText className="w-8 h-8" />}
-                title="No notes yet"
-                description="Capture your thoughts and ideas."
-                action={
-                  <Button  onClick={() => router.push("/notes/new")}>
-                    Create your first note
-                  </Button>
-                }
-              />
-            ) : (
-              <div className="grid sm:grid-cols-2 gap-3">
-                {sortedNotes.map((note) => (
-                  <Card
-                    key={note._id}
-                    className="group cursor-pointer hover:shadow-md transition-all relative"
-                    onClick={() => router.push(`/notes/${note._id}`)}
-                  >
-                    {note.isPinned && (
-                      <Pin className="absolute top-3 right-10 w-3.5 h-3.5 text-primary rotate-45" />
-                    )}
-                    <CardHeader className="pb-2 pt-4 px-4">
-                      <CardTitle className="text-base font-medium leading-snug line-clamp-1 pr-6">
-                        {note.title || "Untitled"}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-4 pb-4">
-                      <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
-                        {note.content}
-                      </p>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {note.tags?.slice(0, 3).map((tag) => (
-                          <Badge key={tag} variant="secondary" className="text-xs px-2 py-0">
-                            {tag}
-                          </Badge>
-                        ))}
-                        <span className="text-xs text-muted-foreground ml-auto">
-                          {formatDate(note.createdAt)}
+
+              {filesLoading ? (
+                <LoadingSpinner />
+              ) : files.length === 0 ? (
+                <EmptyState
+                  icon={<FolderOpen size={24} />}
+                  title="No files yet"
+                  desc="Upload documents, images, and more."
+                  btnLabel="Upload your first file"
+                  onAction={() => router.push("/file/upload")}
+                />
+              ) : (
+                <div>
+                  {Object.entries(filesByFolder).map(([folder, folderFiles]) => (
+                    <div key={folder} className="db-folder">
+                      <button className="db-folder-header" onClick={() => toggleFolder(folder)}>
+                        {expandedFolders[folder]
+                          ? <ChevronDown size={15} style={{ color: "#a78bfa" }} />
+                          : <ChevronRight size={15} style={{ color: "rgba(255,255,255,0.4)" }} />}
+                        <FolderOpen size={15} style={{ color: "#a78bfa" }} />
+                        <span>{folder}</span>
+                        <span style={{ marginLeft: "auto", fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.2)", color: "#a78bfa" }}>
+                          {folderFiles.length}
                         </span>
-                      </div>
-                    </CardContent>
-                    {/* Hover actions */}
-                    <div
-                      className="absolute top-2.5 right-2.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <button
-                        onClick={() => handleTogglePin(note._id, note.isPinned)}
-                        className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground"
-                        title={note.isPinned ? "Unpin" : "Pin"}
-                      >
-                        <Pin className="w-3.5 h-3.5" />
                       </button>
-                      <button
-                        onClick={() => handleDeleteNote(note._id)}
-                        disabled={deletingId === note._id}
-                        className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                      >
-                        {deletingId === note._id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
-        {/* ── FILES TAB ─────────────────────────────────────────────────────── */}
-        {activeTab === "files" && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xl font-semibold">Files</h2>
-              <Button  onClick={() => router.push("/files/upload")}>
-                <FolderOpen className="w-4 h-4 mr-1.5" />
-                Upload
-              </Button>
-            </div>
-
-            {filesLoading ? (
-              <div className="flex justify-center py-16">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : files.length === 0 ? (
-              <EmptyState
-                icon={<FolderOpen className="w-8 h-8" />}
-                title="No files yet"
-                description="Upload documents, images, and more."
-                action={
-                  <Button  onClick={() => router.push("/files/upload")}>
-                    Upload your first file
-                  </Button>
-                }
-              />
-            ) : (
-              <div className="space-y-2">
-                {Object.entries(filesByFolder).map(([folder, folderFiles]) => (
-                  <div key={folder} className="border border-border/60 rounded-xl overflow-hidden">
-                    <button
-                      onClick={() => toggleFolder(folder)}
-                      className="w-full flex items-center gap-2 px-4 py-3 bg-muted/30 hover:bg-muted/60 transition-colors text-left"
-                    >
-                      {expandedFolders[folder] ? (
-                        <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                      )}
-                      <FolderOpen className="w-4 h-4 text-primary" />
-                      <span className="font-medium text-sm">{folder}</span>
-                      <Badge variant="secondary" className="ml-auto text-xs">
-                        {folderFiles.length}
-                      </Badge>
-                    </button>
-
-                    {expandedFolders[folder] && (
-                      <div className="divide-y divide-border/40">
-                        {folderFiles.map((file) => (
-                          <div
-                            key={file._id}
-                            className="flex items-center gap-3 px-4 py-2.5 group hover:bg-muted/20 transition-colors"
-                          >
-                            <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm truncate">{file.originalName}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {formatSize(file.fileSize)} · {formatDate(file.createdAt)}
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => handleDeleteFile(file._id)}
-                              disabled={deletingId === file._id}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                            >
-                              {deletingId === file._id ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-3.5 h-3.5" />
-                              )}
-                            </button>
+                      {expandedFolders[folder] && folderFiles.map((file) => (
+                        <div key={file._id} className="db-file-row">
+                          <FileText size={15} style={{ color: "rgba(255,255,255,0.35)", flexShrink: 0 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {file.originalName}
+                            </p>
+                            <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 2 }}>
+                              {formatSize(file.fileSize)} · {formatDate(file.createdAt)}
+                            </p>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+                          <button
+                            className="db-file-delete"
+                            onClick={() => handleDeleteFile(file._id)}
+                            disabled={deletingId === file._id}
+                          >
+                            {deletingId === file._id
+                              ? <Loader2 size={13} className="db-spinner" />
+                              : <Trash2 size={13} />}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
-        {/* ── CHAT TAB ──────────────────────────────────────────────────────── */}
-        {activeTab === "chat" && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xl font-semibold">AI Chat</h2>
-            </div>
-            <div className="rounded-xl border border-border/60 bg-muted/20 flex flex-col items-center justify-center gap-4 py-20">
-              <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
-                <Brain className="w-7 h-7 text-primary" />
+          {/* ── CHAT TAB ── */}
+          {activeTab === "chat" && (
+            <div>
+              <div className="db-section-header">
+                <span className="db-section-title">AI Chat</span>
               </div>
-              <div className="text-center">
-                <p className="font-medium mb-1">Your AI companion</p>
-                <p className="text-sm text-muted-foreground max-w-sm">
-                  Chat with your personal AI to reflect on your mood, explore your notes, or just talk.
-                </p>
+              <div className="db-chat-box">
+                <div className="db-chat-icon">
+                  <Brain size={28} style={{ color: "#a78bfa" }} />
+                </div>
+                <div>
+                  <p style={{ fontFamily: "'Lora', serif", fontSize: "1.2rem", fontWeight: 700, marginBottom: 6 }}>
+                    Your AI companion
+                  </p>
+                  <p style={{ fontSize: 14, color: "rgba(255,255,255,0.4)", maxWidth: 380, lineHeight: 1.7, margin: 0 }}>
+                    Chat with your personal AI to reflect on your mood, explore your notes, or just talk.
+                  </p>
+                </div>
+                <button className="db-chat-btn" onClick={() => router.push("/chat")}>
+                  <Sparkles size={15} />
+                  Start chatting
+                </button>
               </div>
-              <Button onClick={() => router.push("/chat")}>
-                <MessageCircle className="w-4 h-4 mr-1.5" />
-                Start chatting
-              </Button>
             </div>
-          </div>
-        )}
-      </main>
+          )}
+        </main>
+      </div>
+    </>
+  );
+}
+
+// ── Helper components ─────────────────────────────────────
+
+function LoadingSpinner() {
+  return (
+    <div style={{ display: "flex", justifyContent: "center", padding: "60px 0" }}>
+      <Loader2 size={22} style={{ color: "#a78bfa", animation: "dbSpinFast 0.9s linear infinite" }} />
     </div>
   );
 }
 
-// ── Helper components ─────────────────────────────────────────────────────────
-
-function EmptyState({
-  icon,
-  title,
-  description,
-  action,
-}: {
+function EmptyState({ icon, title, desc, btnLabel, onAction }: {
   icon: React.ReactNode;
   title: string;
-  description: string;
-  action?: React.ReactNode;
+  desc: string;
+  btnLabel: string;
+  onAction: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
-      <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
-        {icon}
-      </div>
+    <div className="db-empty">
+      <div className="db-empty-icon">{icon}</div>
       <div>
-        <p className="font-medium mb-0.5">{title}</p>
-        <p className="text-sm text-muted-foreground">{description}</p>
+        <p style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>{title}</p>
+        <p style={{ fontSize: 13, color: "rgba(255,255,255,0.38)", margin: 0 }}>{desc}</p>
       </div>
-      {action}
+      <button
+        onClick={onAction}
+        style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 22px", background: "#a78bfa", color: "#0a0a14", border: "none", borderRadius: 12, fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", cursor: "pointer", transition: "transform 0.2s, box-shadow 0.2s" }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 6px 20px rgba(167,139,250,0.35)"; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "none"; }}
+      >
+        <Plus size={14} />
+        {btnLabel}
+      </button>
     </div>
   );
-}
-
-function getMoodEmoji(sentiment: string): string {
-  const map: Record<string, string> = {
-    happy: "😊",
-    excited: "🤩",
-    neutral: "😐",
-    sad: "😢",
-    low: "😔",
-    stressed: "😤",
-    anxious: "😰",
-    angry: "😠",
-  };
-  return map[sentiment] ?? "🙂";
 }

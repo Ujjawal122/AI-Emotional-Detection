@@ -30,7 +30,7 @@ export default function SignupPage() {
     setLoading(true);
     try {
       await axios.post("/api/auth/signup", { username, email, password });
-      router.push("/login");
+      router.push("/verify-email");
     } catch (err: any) {
       setError(err?.response?.data?.error ?? "Something went wrong. Please try again.");
     } finally {
