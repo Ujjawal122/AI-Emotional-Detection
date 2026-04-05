@@ -30,6 +30,9 @@ import {
   Trash2,
   Sparkles,
   Plus,
+  X,
+  Download,
+  Eye,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────
@@ -62,6 +65,8 @@ interface FileItem {
   fileSize: number;
   folder: string;
   createdAt: string;
+  url?: string;
+  fileType?: string;
 }
 
 // ─── Mood palette (matches landing page accent system) ───
@@ -101,6 +106,8 @@ export default function DashboardPage() {
   const [filesLoading, setFilesLoading] = useState(false);
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
   const [deletingId, setDeletingId]     = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
 
   // ── Auth via /api/auth/me ─────────────────────────────
   useEffect(() => {
@@ -145,8 +152,26 @@ export default function DashboardPage() {
     setFilesLoading(true);
     try {
       const { data } = await axios.get("/api/files", { withCredentials: true });
-      setFiles(data.files ?? []);
+      // Enhance file data with Cloudinary URL
+      const enhancedFiles = (data.files ?? []).map((file: any) => ({
+        ...file,
+        url: file.url || `https://res.cloudinary.com/your-cloud-name/${file.fileName}`,
+        fileType: file.fileType || getFileType(file.originalName)
+      }));
+      setFiles(enhancedFiles);
     } catch { /* silent */ } finally { setFilesLoading(false); }
+  };
+
+  const getFileType = (fileName: string): string => {
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    if (['pdf'].includes(ext)) return 'pdf';
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) return 'image';
+    if (['mp4', 'webm', 'mov'].includes(ext)) return 'video';
+    if (['txt', 'md'].includes(ext)) return 'text';
+    if (['doc', 'docx'].includes(ext)) return 'word';
+    if (['xls', 'xlsx'].includes(ext)) return 'excel';
+    if (['ppt', 'pptx'].includes(ext)) return 'powerpoint';
+    return 'other';
   };
 
   const handleLogout = async () => {
@@ -175,6 +200,10 @@ export default function DashboardPage() {
     try {
       await axios.delete(`/api/files/${id}`, { withCredentials: true });
       setFiles((p) => p.filter((f) => f._id !== id));
+      if (selectedFile?._id === id) {
+        setIsViewerOpen(false);
+        setSelectedFile(null);
+      }
     } catch { /* silent */ } finally { setDeletingId(null); }
   };
 
@@ -182,11 +211,39 @@ export default function DashboardPage() {
     try {
       await axios.patch(`/api/notes/${id}`, { isPinned: !isPinned }, { withCredentials: true });
       setNotes((p) => p.map((n) => n._id === id ? { ...n, isPinned: !isPinned } : n));
-    } catch { /* silent */ }
+    } catch { /* silent */ } 
   };
 
   const toggleFolder = (folder: string) =>
     setExpandedFolders((p) => ({ ...p, [folder]: !p[folder] }));
+
+  const handleViewFile = (file: FileItem) => {
+    setSelectedFile(file);
+    setIsViewerOpen(true);
+  };
+
+  const handleDownloadFile = async (file: FileItem) => {
+    try {
+      if (file.url) {
+        window.open(file.url, '_blank');
+      } else {
+        const response = await axios.get(`/api/files/${file._id}/download`, {
+          responseType: 'blob',
+          withCredentials: true
+        });
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', file.originalName);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error('Download failed:', error);
+    }
+  };
 
   const filesByFolder = files.reduce<Record<string, FileItem[]>>((acc, f) => {
     const key = f.folder || "Uncategorized";
@@ -453,16 +510,114 @@ export default function DashboardPage() {
           position: relative;
         }
         .db-file-row:hover { background: rgba(255,255,255,0.03); }
-        .db-file-delete {
+        .db-file-actions {
+          display: flex; gap: 6px;
           opacity: 0; transition: opacity 0.2s;
+          margin-left: auto;
+        }
+        .db-file-row:hover .db-file-actions { opacity: 1; }
+        .db-file-delete {
           background: rgba(248,113,113,0.1);
           border: 1px solid rgba(248,113,113,0.2);
           border-radius: 8px; padding: 5px;
           cursor: pointer; color: #f87171;
           display: flex; align-items: center;
-          margin-left: auto;
         }
-        .db-file-row:hover .db-file-delete { opacity: 1; }
+        .db-file-view {
+          background: rgba(167,139,250,0.1);
+          border: 1px solid rgba(167,139,250,0.2);
+          border-radius: 8px; padding: 5px;
+          cursor: pointer; color: #a78bfa;
+          display: flex; align-items: center;
+        }
+        .db-file-view:hover { background: rgba(167,139,250,0.2); }
+        .db-file-delete:hover { background: rgba(248,113,113,0.2); }
+
+        /* Modal styles */
+        .db-modal-overlay {
+          position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+          background: rgba(0,0,0,0.85);
+ backdrop-filter: blur(8px);
+          z-index: 1000;
+          display: flex; align-items: center; justify-content: center;
+          animation: dbFadeIn 0.2s ease;
+        }
+        @keyframes dbFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        .db-modal {
+          background: #0d0d1c;
+          border: 1px solid rgba(167,139,250,0.2);
+          border-radius: 20px;
+          width: 90%;
+          max-width: 1000px;
+          height: 85vh;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+        .db-modal-header {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 16px 20px;
+          border-bottom: 1px solid rgba(255,255,255,0.1);
+          background: rgba(0,0,0,0.2);
+        }
+        .db-modal-title {
+          font-family: 'Lora', serif;
+          font-size: 16px;
+          font-weight: 600;
+          color: white;
+        }
+        .db-modal-close {
+          background: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 8px;
+          padding: 6px;
+          cursor: pointer;
+          color: rgba(255,255,255,0.6);
+          display: flex;
+          align-items: center;
+          transition: all 0.2s;
+        }
+        .db-modal-close:hover {
+          background: rgba(248,113,113,0.15);
+          color: #f87171;
+          border-color: rgba(248,113,113,0.3);
+        }
+        .db-modal-content {
+          flex: 1;
+          overflow: auto;
+          padding: 20px;
+        }
+        .db-pdf-viewer {
+          width: 100%;
+          height: 100%;
+          border: none;
+          border-radius: 12px;
+        }
+        .db-image-viewer {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+        }
+        .db-image-viewer img {
+          max-width: 100%;
+          max-height: 100%;
+          object-fit: contain;
+          border-radius: 12px;
+        }
+        .db-unsupported {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+          gap: 20px;
+          text-align: center;
+        }
 
         /* Empty state */
         .db-empty {
@@ -840,15 +995,25 @@ export default function DashboardPage() {
                               {formatSize(file.fileSize)} · {formatDate(file.createdAt)}
                             </p>
                           </div>
-                          <button
-                            className="db-file-delete"
-                            onClick={() => handleDeleteFile(file._id)}
-                            disabled={deletingId === file._id}
-                          >
-                            {deletingId === file._id
-                              ? <Loader2 size={13} className="db-spinner" />
-                              : <Trash2 size={13} />}
-                          </button>
+                          <div className="db-file-actions">
+                            <button
+                              className="db-file-view"
+                              onClick={() => handleViewFile(file)}
+                              title="View file"
+                            >
+                              <Eye size={13} />
+                            </button>
+                            <button
+                              className="db-file-delete"
+                              onClick={() => handleDeleteFile(file._id)}
+                              disabled={deletingId === file._id}
+                              title="Delete file"
+                            >
+                              {deletingId === file._id
+                                ? <Loader2 size={13} className="db-spinner" />
+                                : <Trash2 size={13} />}
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -885,6 +1050,71 @@ export default function DashboardPage() {
           )}
         </main>
       </div>
+
+      {/* ── FILE VIEWER MODAL ── */}
+      {isViewerOpen && selectedFile && (
+        <div className="db-modal-overlay" onClick={() => setIsViewerOpen(false)}>
+          <div className="db-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="db-modal-header">
+              <div className="db-modal-title">{selectedFile.originalName}</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  className="db-modal-close"
+                  onClick={() => handleDownloadFile(selectedFile)}
+                  title="Download"
+                >
+                  <Download size={16} />
+                </button>
+                <button
+                  className="db-modal-close"
+                  onClick={() => setIsViewerOpen(false)}
+                  title="Close"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+            <div className="db-modal-content">
+              {selectedFile.fileType === 'pdf' && selectedFile.url && (
+                <iframe
+                  src={`${selectedFile.url}#toolbar=0`}
+                  className="db-pdf-viewer"
+                  title={selectedFile.originalName}
+                />
+              )}
+              {selectedFile.fileType === 'image' && selectedFile.url && (
+                <div className="db-image-viewer">
+                  <img src={selectedFile.url} alt={selectedFile.originalName} />
+                </div>
+              )}
+              {selectedFile.fileType === 'video' && selectedFile.url && (
+                <video controls style={{ width: '100%', height: '100%', borderRadius: '12px' }}>
+                  <source src={selectedFile.url} type={`video/${selectedFile.originalName.split('.').pop()}`} />
+                  Your browser does not support the video tag.
+                </video>
+              )}
+              {(!selectedFile.url || selectedFile.fileType === 'other') && (
+                <div className="db-unsupported">
+                  <div className="db-empty-icon">
+                    <FileText size={32} />
+                  </div>
+                  <p style={{ fontSize: 14, color: "rgba(255,255,255,0.6)" }}>
+                    Preview not available for this file type
+                  </p>
+                  <button
+                    className="db-chat-btn"
+                    onClick={() => handleDownloadFile(selectedFile)}
+                    style={{ padding: "10px 20px", fontSize: "13px" }}
+                  >
+                    <Download size={14} />
+                    Download File
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

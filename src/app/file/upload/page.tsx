@@ -73,6 +73,10 @@ export default function UploadPage() {
     setSelectedFile(file);
   };
 
+
+
+  
+
   const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handleFile(file);
@@ -89,6 +93,9 @@ export default function UploadPage() {
     e.preventDefault();
     setDragOver(true);
   };
+
+
+
 
   const onDragLeave = () => setDragOver(false);
 

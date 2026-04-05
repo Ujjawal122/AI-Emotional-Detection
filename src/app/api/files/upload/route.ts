@@ -27,6 +27,7 @@ export async function POST(req:NextRequest){
         const tags=fields.tags?(fields.tags as string).split(",").map((t)=>t.trim().toLowerCase()).filter(Boolean):[];
 
         const cloudinaryResult = await new Promise<{
+      resource_type: any;
       public_id:  string;
       secure_url: string;
     }>((resolve, reject) => {
@@ -41,7 +42,7 @@ export async function POST(req:NextRequest){
           if (error || !result) {
             return reject(error ?? new Error("Cloudinary upload failed"));
           }
-          resolve({ public_id: result.public_id, secure_url: result.secure_url });
+          resolve({ public_id: result.public_id, secure_url: result.secure_url ,resource_type:result.resource_type});
         }
       );
       stream.end(file.buffer);
@@ -49,11 +50,13 @@ export async function POST(req:NextRequest){
 
       const saved = await File.create({
       user:         user.id,
-      fileName:     cloudinaryResult.public_id,
+      fileName:     file.originalname,
       originalName: file.originalname,
       fileSize:     file.size,
       mimeType:     file.mimetype,
       filePath:     cloudinaryResult.secure_url,
+      public_id:    cloudinaryResult.public_id,
+      resource_type:   cloudinaryResult.resource_type,
       folder,
       tags,
     });

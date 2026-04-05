@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { dbConnect } from "@/lib/dbConnection";
 import cloudinary from "@/lib/Cloudiary";
 import File from "@/models/File.model";
+import mongoose from "mongoose";
 
 export async function GET(
   req: NextRequest,
@@ -18,6 +19,11 @@ export async function GET(
 
    
     const { id } = await params;
+
+    if(!mongoose.Types.ObjectId.isValid(id)){
+      return NextResponse.json({ error: "Invalid file ID" }, { status: 400 });
+    }
+    
 
     const file = await File.findOne({ _id: id, user: user.id }).lean();
 
@@ -53,8 +59,8 @@ export async function DELETE(
       return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
 
-    await cloudinary.uploader.destroy(file.filename, {
-      resource_type: "auto",
+    await cloudinary.uploader.destroy(file.public_id, {
+      resource_type: "raw",
     });
 
     await File.findByIdAndDelete(id);
@@ -63,7 +69,7 @@ export async function DELETE(
       { message: "File deleted successfully" },
       { status: 200 }
     );
-  } catch (error) {
+  } catch (error:any) {
     console.error("Delete file error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

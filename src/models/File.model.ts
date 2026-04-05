@@ -7,6 +7,8 @@ interface File extends Document {
   fileSize: number;
   mimeType: string;
   filePath: string;
+  resource_type:string;
+  public_id:string;
   folder?: string;
   tags: string[];
   createdAt: Date;
@@ -43,6 +45,14 @@ const FileSchema = new Schema<File>(
     filePath: {
       type: String,
       required: [true, "File path is required"],
+    },
+    public_id:{
+      type:String,
+      required:[true,"Cloudinary public_id is required"]
+    },
+    resource_type:{
+      type:String,
+      required:[true,"cloudinary required type for delelation"]
     },
     folder: {
       type: String,
