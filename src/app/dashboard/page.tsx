@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { getCloudinaryUrl } from "@/lib/cloudinaryUrl";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -80,6 +81,8 @@ const MOOD_COLORS: Record<string, { bg: string; border: string; text: string; em
   anxious: { bg: "rgba(251,146,60,0.10)",  border: "rgba(251,146,60,0.28)",  text: "#fb923c", emoji: "😰" },
   angry:   { bg: "rgba(239,68,68,0.10)",   border: "rgba(239,68,68,0.28)",   text: "#ef4444", emoji: "😠" },
 };
+
+
 
 const formatSize = (b: number) => {
   if (b === 0) return "0 B";
@@ -155,7 +158,7 @@ export default function DashboardPage() {
       // Enhance file data with Cloudinary URL
       const enhancedFiles = (data.files ?? []).map((file: any) => ({
         ...file,
-        url: file.url || `https://res.cloudinary.com/your-cloud-name/${file.fileName}`,
+        url: file.url || getCloudinaryUrl(file),
         fileType: file.fileType || getFileType(file.originalName)
       }));
       setFiles(enhancedFiles);
