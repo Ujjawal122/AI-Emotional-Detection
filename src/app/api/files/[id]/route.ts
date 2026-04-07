@@ -25,7 +25,7 @@ export async function GET(
     }
     
 
-    const file = await File.findOne({ _id: id, user: user.id }).lean();
+    const file = await File.findOne({ _id: id, user: user._id }).lean();
 
     if (!file) {
       return NextResponse.json({ error: "File not Found" }, { status: 404 });
@@ -53,7 +53,7 @@ export async function DELETE(
     
     const { id } = await params;
 
-    const file = await File.findOne({ _id: id, user: user.id });
+    const file = await File.findOne({ _id: id, user: user._id });
 
     if (!file) {
       return NextResponse.json({ error: "File not found" }, { status: 404 });
@@ -69,7 +69,7 @@ export async function DELETE(
       { message: "File deleted successfully" },
       { status: 200 }
     );
-  } catch (error:any) {
+  } catch (error) {
     console.error("Delete file error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

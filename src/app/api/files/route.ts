@@ -15,12 +15,12 @@ export async function GET(req: NextRequest) {
 
     // Query uses "user" field — matches your schema
     const files = await File
-      .find({ user: user.id })
+      .find({ user: user._id })
       .sort({ createdAt: -1 })
       .lean();
 
     return NextResponse.json({ files }, { status: 200 });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Get files error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

@@ -1,5 +1,6 @@
 import jwt, { type JwtPayload } from "jsonwebtoken";
 import type { NextRequest } from "next/server";
+import { dbConnect } from "@/lib/dbConnection";
 import User from "@/models/User.model";
 
 const JWT_KEY = process.env.JWT_KEY_PASS;
@@ -40,5 +41,6 @@ export const getCurrentUser = async (req: NextRequest) => {
   const userId = (decoded as JwtPayload).userId as string | undefined;
   if (!userId) return null;
 
-  return await User.findById(userId);
+  await dbConnect();
+  return await User.findById(userId).select("_id username email isVerified");
 };

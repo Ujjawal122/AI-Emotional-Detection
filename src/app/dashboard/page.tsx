@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { getCloudinaryUrl } from "@/lib/cloudinaryUrl";
@@ -20,7 +19,6 @@ import {
   Brain,
   FolderOpen,
   FileText,
-  Calendar,
   TrendingUp,
   MessageCircle,
   LogOut,
@@ -138,8 +136,8 @@ export default function DashboardPage() {
   const fetchMoodEntries = async () => {
     setMoodLoading(true);
     try {
-      const { data } = await axios.get("/api/mood", { withCredentials: true });
-      setMoodEntries(data.entries ?? []);
+      const { data } = await axios.get("/api/mood/history", { withCredentials: true });
+      setMoodEntries(data.moods ?? []);
     } catch { /* silent */ } finally { setMoodLoading(false); }
   };
 
@@ -156,7 +154,7 @@ export default function DashboardPage() {
     try {
       const { data } = await axios.get("/api/files", { withCredentials: true });
       // Enhance file data with Cloudinary URL
-      const enhancedFiles = (data.files ?? []).map((file: any) => ({
+      const enhancedFiles = (data.files ?? []).map((file: FileItem) => ({
         ...file,
         url: file.url || getCloudinaryUrl(file),
         fileType: file.fileType || getFileType(file.originalName)
@@ -712,10 +710,10 @@ export default function DashboardPage() {
         <nav className="db-nav">
           <div className="db-nav-inner">
             {/* Logo */}
-            <a href="/" className="db-logo">
+            <Link href="/" className="db-logo">
               <div className="db-logo-ring">🌀</div>
               <span className="db-logo-text">EmoSoul</span>
-            </a>
+            </Link>
 
             {/* User dropdown */}
             <DropdownMenu>
@@ -771,7 +769,7 @@ export default function DashboardPage() {
               👋
             </h1>
             <p style={{ color: "rgba(255,255,255,0.38)", fontSize: 14 }}>
-              Here's a look at your emotional journey.
+              Here&apos;s a look at your emotional journey.
             </p>
           </div>
 
@@ -809,7 +807,7 @@ export default function DashboardPage() {
             <div>
               <div className="db-section-header">
                 <span className="db-section-title">Mood Journal</span>
-                <button className="db-add-btn" onClick={() => router.push("/mood/new")}>
+                <button className="db-add-btn" onClick={() => router.push("/moods")}>
                   <Plus size={14} /> Log Mood
                 </button>
               </div>
@@ -822,7 +820,7 @@ export default function DashboardPage() {
                   title="No mood entries yet"
                   desc="Start tracking how you feel each day."
                   btnLabel="Log your first mood"
-                  onAction={() => router.push("/mood/new")}
+                  onAction={() => router.push("/moods")}
                 />
               ) : (
                 <div>

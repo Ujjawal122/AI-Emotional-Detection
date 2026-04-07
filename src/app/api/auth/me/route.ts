@@ -11,7 +11,12 @@ export async function GET(req:NextRequest) {
             })
             
         }
-        return NextResponse.json(user)
+        return NextResponse.json({
+            _id: user._id.toString(),
+            username: user.username,
+            email: user.email,
+            isVerified: user.isVerified,
+        })
     }catch(error){
         console.log("error",error);
         return NextResponse.json({
