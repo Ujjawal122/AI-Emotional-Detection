@@ -126,12 +126,13 @@ export default function DashboardPage() {
   }, [router]);
 
   // ── Fetch data on tab change ──────────────────────────
-  useEffect(() => {
-    if (!user) return;
-    if (activeTab === "mood")  fetchMoodEntries();
-    if (activeTab === "notes") fetchNotes();
-    if (activeTab === "files") fetchFiles();
-  }, [activeTab, user]);
+useEffect(() => {
+  if (!user) return;
+
+  fetchMoodEntries();
+  fetchNotes();
+  fetchFiles();
+}, [user]);
 
   const fetchMoodEntries = async () => {
     setMoodLoading(true);
@@ -774,19 +775,23 @@ export default function DashboardPage() {
           </div>
 
           {/* Stats */}
-          <div className="db-stats">
-            {[
-              { num: moodEntries.length, label: "Mood Entries" },
-              { num: notes.length,       label: "Notes" },
-              { num: files.length,       label: "Files" },
-              { num: notes.filter((n) => n.isPinned).length, label: "Pinned Notes" },
-            ].map((s) => (
-              <div key={s.label} className="db-stat-card">
-                <div className="db-stat-num">{s.num}</div>
-                <div className="db-stat-label">{s.label}</div>
-              </div>
-            ))}
-          </div>
+         {notesLoading || filesLoading || moodLoading  ? (
+  <div>Loading stats...</div>
+) : (
+  <div className="db-stats">
+    {[
+      { num: moodEntries.length, label: "Mood Entries" },
+      { num: notes.length,       label: "Notes" },
+      { num: files.length,       label: "Files" },
+      { num: notes.filter((n) => n.isPinned).length, label: "Pinned Notes" },
+    ].map((s) => (
+      <div key={s.label} className="db-stat-card">
+        <div className="db-stat-num">{s.num}</div>
+        <div className="db-stat-label">{s.label}</div>
+      </div>
+    ))}
+  </div>
+)}
 
           {/* Tab bar */}
           <div className="db-tabs">
