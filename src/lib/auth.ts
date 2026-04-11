@@ -42,5 +42,7 @@ export const getCurrentUser = async (req: NextRequest) => {
   if (!userId) return null;
 
   await dbConnect();
-  return await User.findById(userId).select("_id username email isVerified");
+  return await User.findById(userId).select(
+    "_id username fullName email phone location bio isVerified createdAt updatedAt"
+  );
 };

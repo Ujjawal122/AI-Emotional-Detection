@@ -1,0 +1,19 @@
+<svg width="200" height="200" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="swirlGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#60a5fa; stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3b82f6; stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <path d="M50 10 A40 40 0 0 1 90 50 A40 40 0 0 1 50 90 A40 40 0 0 1 25 80" 
+        fill="none" stroke="url(#swirlGradient)" stroke-width="8" stroke-linecap="round" />
+  
+  <path d="M50 25 A25 25 0 0 1 75 50 A25 25 0 0 1 50 75 A25 25 0 0 1 35 70" 
+        fill="none" stroke="#2563eb" stroke-width="6" stroke-linecap="round" opacity="0.8"/>
+
+  <path d="M50 40 A10 10 0 1 1 40 50" 
+        fill="none" stroke="#1d4ed8" stroke-width="4" stroke-linecap="round" />
+        
+  <circle cx="50" cy="50" r="3" fill="#1e40af" />
+</svg>

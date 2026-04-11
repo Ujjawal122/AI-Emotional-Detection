@@ -28,14 +28,20 @@ const comparePasswordHash = (password: string, hashed: string) =>
 
 interface User extends Document {
   username: string;
+  fullName?: string;
   password: string;
   email: string;
+  phone?: string;
+  location?: string;
+  bio?: string;
   moods: mongoose.Types.ObjectId[];
   isVerified: boolean;
   verifyCode: string | null;
   verifyCodeExpiry: Date | null;
   resetPasswordToken: string | null;
   resetPasswordExpiry: number | null;
+  createdAt?: Date;
+  updatedAt?: Date;
   comparePassword(userPassword: string): Promise<boolean>;
 }
 const UserSchema = new Schema<User>({
@@ -46,6 +52,12 @@ const UserSchema = new Schema<User>({
     unique: true,
     minlength: [3, "Username too short"],
     maxlength: [30, "Username too long"],
+  },
+  fullName: {
+    type: String,
+    trim: true,
+    maxlength: [80, "Full name too long"],
+    default: "",
   },
   password: {
     type: String,
@@ -60,6 +72,24 @@ const UserSchema = new Schema<User>({
     lowercase: true,
     trim: true,
     match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, "Invalid email"],
+  },
+  phone: {
+    type: String,
+    trim: true,
+    maxlength: [25, "Phone number too long"],
+    default: "",
+  },
+  location: {
+    type: String,
+    trim: true,
+    maxlength: [80, "Location too long"],
+    default: "",
+  },
+  bio: {
+    type: String,
+    trim: true,
+    maxlength: [240, "Bio too long"],
+    default: "",
   },
   moods: [
     {
@@ -87,7 +117,7 @@ const UserSchema = new Schema<User>({
     type: Number,
     default: null,
   },
-});
+}, { timestamps: true });
 
 
 
@@ -109,10 +139,10 @@ UserSchema.virtual("fullname").get(function (this: User) {
 });
 
 UserSchema.methods.toJSON = function () {
-  const user = this.toObject();
-  delete (user as any).password;
-  delete (user as any).verifyCode;
-  delete (user as any).resetPasswordToken;
+  const user = this.toObject() as Record<string, unknown>;
+  delete user.password;
+  delete user.verifyCode;
+  delete user.resetPasswordToken;
   return user;
 };
 

@@ -140,7 +140,7 @@ export default function LandingPage() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const { data } = await axios.get<User>("/api/auth/me", {
+        const { data } = await axios.get("/api/auth/me", {
           withCredentials: true,
         });
         setUser(data);
@@ -378,13 +378,13 @@ export default function LandingPage() {
                     <DropdownMenuSeparator style={{ background: "rgba(255,255,255,0.08)" }} />
                     <DropdownMenuItem
                       onClick={() => router.push("/dashboard")}
-                      style={{ cursor: "pointer", color: "rgba(255,255,255,0.8)" }}
+                      style={{ cursor: "pointer",  }}
                     >
                       Dashboard
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => router.push("/profile")}
-                      style={{ cursor: "pointer", color: "rgba(255,255,255,0.8)" }}
+                      style={{ cursor: "pointer",  }}
                     >
                       Profile
                     </DropdownMenuItem>
@@ -424,26 +424,8 @@ export default function LandingPage() {
 
         {/* ─── HERO ─── */}
         <section style={{ position: "relative", zIndex: 10, minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "120px 24px 80px" }}>
-          <Badge
-            className="fu"
-            style={{
-              background: `${cm.accent}1a`,
-              border: `1px solid ${cm.accent}40`,
-              color: cm.accent,
-              borderRadius: 999,
-              padding: "6px 16px",
-              fontSize: 12,
-              fontWeight: 500,
-              marginBottom: 28,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 7,
-              transition: "all 1.2s ease",
-            }}
-          >
-            <span className="pulse-dot">●</span>
-            AI that truly understands your emotions
-          </Badge>
+          
+          
 
           <h1
             className="lora fu1"
